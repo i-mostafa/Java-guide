@@ -1,11 +1,14 @@
 # Activated with @ActiveProfiles("test"). Turns off infrastructure not needed in tests.
+# Spring merges this file ON TOP of src/main/resources/application.yml (only these keys change),
+# like spreading { ...baseConfig, ...testOverrides }. The DB and Kafka connection settings are supplied by
+# Testcontainers (@ServiceConnection in TestcontainersConfig), so they don't appear here.
 spring:
   cloud:
     config:
-      enabled: false
+      enabled: false                    # don't try to reach the central Config Server
 eureka:
   client:
-    enabled: false
+    enabled: false                      # don't register with / query the Eureka discovery server
 management:
   tracing:
-    enabled: false
+    enabled: false                      # no trace export during tests

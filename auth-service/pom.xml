@@ -1,18 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven build file for auth-service (like the package.json of one workspace package).
+  Produces an executable Spring Boot app. Dependencies are listed without versions because the
+  root pom imports BOMs (bills of materials) that pin tested versions - similar to a lockfile
+  that is shared by the whole monorepo.
+-->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <!-- Version of the POM format itself; always 4.0.0. -->
     <modelVersion>4.0.0</modelVersion>
+    <!-- Inherit shared settings from the root pom.xml (Java version, BOMs, plugin config). -->
     <parent>
         <groupId>com.homefin</groupId>
         <artifactId>homefin-platform</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>
+    <!-- This module's coordinates: groupId and version are inherited, artifactId is its own name. -->
     <artifactId>auth-service</artifactId>
     <name>auth-service</name>
     <description>Registration, login and JWT issuing</description>
 
+    <!-- Like "dependencies" in package.json. Default scope is "compile" = needed to build and run. -->
     <dependencies>
+        <!-- Our own shared module from this repo (like a workspace:* dependency). Its version is
+             managed in the root pom's dependencyManagement. -->
         <dependency>
             <groupId>com.homefin</groupId>
             <artifactId>common-lib</artifactId>
@@ -44,8 +56,11 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
+            <!-- runtime scope: the JDBC driver is only needed when running, never at compile time
+                 (code talks to the generic JDBC/JPA API, not to the driver classes). -->
             <scope>runtime</scope>
         </dependency>
+        <!-- Flyway: versioned SQL migrations run at startup; the second artifact adds PostgreSQL support. -->
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
@@ -55,7 +70,7 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <!-- Messaging -->
+        <!-- Messaging: Spring for Apache Kafka (KafkaTemplate producer, listeners). -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
@@ -96,6 +111,8 @@
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
 
+        <!-- Lombok: annotation-driven code generation at compile time (getters, constructors, loggers).
+             optional = not passed on to anything depending on this module. -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -111,6 +128,8 @@
         </dependency>
 
         <!-- ===== Tests ===== -->
+        <!-- scope=test: only on the test classpath, like devDependencies. spring-boot-starter-test bundles
+             JUnit 5 (test runner, like jest), AssertJ (assertions), Mockito (mocks) and MockMvc. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -118,6 +137,7 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
+            <!-- Helpers for testing secured endpoints (e.g. mock users and JWTs in MockMvc). -->
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
@@ -128,6 +148,8 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
+            <!-- Testcontainers: start real Postgres/Kafka in Docker during tests; the Spring Boot
+                 integration provides @ServiceConnection. -->
             <artifactId>spring-boot-testcontainers</artifactId>
             <scope>test</scope>
         </dependency>
@@ -150,6 +172,7 @@
 
     <build>
         <plugins>
+            <!-- Builds the executable fat JAR ("java -jar auth-service.jar") and adds "mvn spring-boot:run". -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

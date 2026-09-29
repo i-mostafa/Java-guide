@@ -1,10 +1,17 @@
+# Local settings of the config-server app itself (Spring Boot reads src/main/resources/application.yml
+# automatically at startup - think of it as the built-in ".env / config.ts" for a Spring app).
+# Keys are nested; "server.port" below is written as server: -> port:.
+
+# HTTP port of the embedded Tomcat (like app.listen(8888)). 8888 is the conventional config-server port.
 server:
   port: 8888
 
 spring:
   application:
+    # The service's logical name, used in logs, tracing and service discovery.
     name: config-server
   profiles:
+    # Profiles are named config sets that can be switched on (like NODE_ENV-specific config files).
     # "native" = read config files from the filesystem/classpath.
     # In production use the default "git" backend (spring.cloud.config.server.git.uri) or Vault.
     active: native
@@ -12,8 +19,13 @@ spring:
     config:
       server:
         native:
+          # Where the served YAML files live. ${VAR:default} is a placeholder resolved at startup:
+          # use env var CONFIG_SEARCH_LOCATIONS if set, otherwise the default after the colon -
+          # i.e. process.env.CONFIG_SEARCH_LOCATIONS ?? 'classpath:/config-repo'.
+          # "classpath:" = inside the app's JAR (the files under src/main/resources).
           search-locations: ${CONFIG_SEARCH_LOCATIONS:classpath:/config-repo}
 
+# Spring Boot Actuator: operational endpoints under /actuator. Only expose health and info over HTTP.
 management:
   endpoints:
     web:

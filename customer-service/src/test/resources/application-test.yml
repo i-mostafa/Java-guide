@@ -1,11 +1,14 @@
 # Activated with @ActiveProfiles("test"). Turns off infrastructure not needed in tests.
+# Spring Boot loads application.yml first, then application-<profile>.yml on top of it, so the keys here
+# override the main config only when the "test" profile is active (like merging a .env.test over .env).
+# It lives in src/test/resources, so it is on the classpath only when tests run and never ships in the jar.
 spring:
   cloud:
     config:
-      enabled: false
+      enabled: false   # don't try to fetch config from the central Config Server
 eureka:
   client:
-    enabled: false
+    enabled: false     # don't register with the Eureka service registry
 management:
   tracing:
-    enabled: false
+    enabled: false     # don't create/export OpenTelemetry traces

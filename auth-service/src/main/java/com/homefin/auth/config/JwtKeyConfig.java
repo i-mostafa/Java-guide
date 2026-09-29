@@ -18,6 +18,7 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
+// java.security = the JDK's built-in crypto API (like Node's "crypto" module).
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
@@ -35,25 +36,38 @@ import java.util.UUID;
  * and multiple instances would each have their own key. In production load the key from a
  * secret manager / KMS / Vault, or use a real Authorization Server (Keycloak, Spring
  * Authorization Server, Auth0, Cognito...).
+ *
+ * <p>Defines three beans: the key pair, an encoder (used by TokenService to sign) and a decoder
+ * (used by Spring Security to verify incoming bearer tokens on this service's own endpoints).
+ * Node analogy: {@code crypto.generateKeyPairSync('rsa', ...)} at boot plus {@code jose}'s
+ * SignJWT / jwtVerify wrapped as injectable providers.
  */
 @Slf4j
+// @Configuration: its @Bean methods are called by Spring at startup to create beans.
 @Configuration
 public class JwtKeyConfig {
 
+    // "throws NoSuchAlgorithmException": this method may throw a CHECKED exception, so it has to be
+    // declared (the compiler enforces it). Spring would fail startup if it were thrown.
     @Bean
     public RSAKey rsaKey() throws NoSuchAlgorithmException {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
         KeyPair keyPair = generator.generateKeyPair();
         log.warn("Generated an ephemeral RSA signing key - DO NOT use this in production");
+        // "(RSAPublicKey) keyPair.getPublic()" casts the generic PublicKey to the RSA-specific type.
+        // RSAKey.Builder is a static nested class, created with "new Outer.Inner(...)".
         return new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
                 .privateKey(keyPair.getPrivate())
+                // Random key id ("kid"); lets verifiers pick the right key after a key rotation.
                 .keyID(UUID.randomUUID().toString())
                 .build();
     }
 
+    // Bean method parameters are injected by Spring: here the RSAKey bean created above.
     @Bean
     public JwtEncoder jwtEncoder(RSAKey rsaKey) {
+        // new ImmutableJWKSet<>(...): the diamond "<>" lets Java infer the generic type argument.
         return new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(rsaKey)));
     }
 
@@ -61,8 +75,12 @@ public class JwtKeyConfig {
     @Bean
     public JwtDecoder jwtDecoder(RSAKey rsaKey, JwtProperties props) throws JOSEException {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(rsaKey.toRSAPublicKey()).build();
+        // OAuth2TokenValidator<Jwt> = generic interface "a validator for Jwt tokens".
+        // JwtClaimValidator<List<String>> checks one claim ("aud") with a predicate lambda that must
+        // return true: aud -> aud != null && aud.contains(...), like (aud) => !!aud?.includes(...).
         OAuth2TokenValidator<Jwt> audience = new JwtClaimValidator<List<String>>(
                 JwtClaimNames.AUD, aud -> aud != null && aud.contains(props.audience()));
+        // Combine the default checks (expiry, not-before, issuer) with our audience check.
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 JwtValidators.createDefaultWithIssuer(props.issuer()), audience));
         return decoder;

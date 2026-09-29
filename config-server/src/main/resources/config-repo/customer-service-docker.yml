@@ -1,7 +1,10 @@
+# Served ONLY to customer-service when the "docker" profile is active ({app}-{profile}.yml).
 spring:
   datasource:
+    # JDBC connection string for customer-service's own database.
     url: jdbc:postgresql://postgres:5432/customerdb
 
 app:
   kyc:
+    # The KYC (identity check) provider is faked by WireMock in docker compose.
     base-url: http://wiremock:8080

@@ -1,13 +1,19 @@
+# Loaded on top of application.yml when the "test" profile is active (@ActiveProfiles("test")).
+# Switches off everything that would need other running services during tests.
 spring:
   cloud:
     config:
+      # Don't try to fetch config from config-server.
       enabled: false
 eureka:
   client:
+    # Don't register with / query the Eureka discovery server.
     enabled: false
 management:
   tracing:
+    # No trace export (there is no Jaeger in tests).
     enabled: false
 app:
   bootstrap-admin:
+    # Don't create the dev admin user (keeps the test DB predictable).
     enabled: false

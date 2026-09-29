@@ -1,25 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven build file for config-server (like the package.json of one workspace package).
+  This module becomes a runnable Spring Boot app: a small HTTP server that hands out
+  configuration (YAML) to all other services at their startup.
+-->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <!-- Version of the POM format itself; always 4.0.0. -->
     <modelVersion>4.0.0</modelVersion>
+    <!-- Inherit shared settings and dependency versions from the root pom.xml
+         (groupId/artifactId/version identify the parent, like a package name + version). -->
     <parent>
         <groupId>com.homefin</groupId>
         <artifactId>homefin-platform</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>
+    <!-- This module's own name; groupId and version are inherited from the parent. -->
     <artifactId>config-server</artifactId>
     <name>config-server</name>
 
+    <!-- Like "dependencies" in package.json; versions come from the BOMs imported in the root pom. -->
     <dependencies>
+        <!-- Spring Cloud Config Server: exposes config files over HTTP (see ConfigServerApplication). -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-config-server</artifactId>
         </dependency>
+        <!-- Actuator: operational endpoints such as /actuator/health (used by docker compose healthchecks). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- scope=test: only on the classpath when compiling/running tests, like a devDependency.
+             The starter bundles JUnit 5, AssertJ, Mockito and Spring's test utilities. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -27,8 +41,12 @@
         </dependency>
     </dependencies>
 
+    <!-- Build configuration. Plugins are Maven's equivalent of build tools wired into "npm run build". -->
     <build>
         <plugins>
+            <!-- Repackages the compiled JAR into an executable "fat JAR" containing all dependencies,
+                 so it can be started with "java -jar config-server.jar" (and enables "mvn spring-boot:run").
+                 Its version/config come from the parent's pluginManagement. -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

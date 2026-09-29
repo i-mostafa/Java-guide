@@ -1,9 +1,19 @@
 # Local environment.
 #   Infrastructure only (run services from your IDE):  docker compose up -d
 #   Everything in containers:                          docker compose --profile apps up -d --build
+#   Stop everything (add -v to also delete the database volume):   docker compose down
+# Compose substitutes ${VAR:-default} from your shell / a .env file (like process.env.VAR || 'default').
+# Inside the compose network, containers reach each other by service name (postgres, kafka, ...);
+# "ports: HOST:CONTAINER" additionally publishes a port on your laptop.
 name: homefin
 
+# "x-" keys are ignored by compose; used here as a reusable block. "&app-env" defines a YAML anchor
+# (a named value) that is reused below with "*app-env" or merged with "<<: *app-env".
+# Spring Boot maps these env vars onto properties, e.g. SPRING_PROFILES_ACTIVE -> spring.profiles.active,
+# and they fill the ${...} placeholders in the services' application.yml files.
+
 x-app-env: &app-env
+  # Activates the "docker" profile -> config-server serves the *-docker.yml overrides.
   SPRING_PROFILES_ACTIVE: docker
   CONFIG_SERVER_URL: http://config-server:8888
   EUREKA_URL: http://discovery-server:8761/eureka
@@ -23,8 +33,12 @@ services:
       POSTGRES_DB: homefin
     ports: ["5432:5432"]
     volumes:
+      # Named volume (declared at the bottom): data survives container restarts.
       - pgdata:/var/lib/postgresql/data
+      # Runs once on first start: creates one database per service (authdb, customerdb, applicationdb).
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    # Other services can wait for "service_healthy" (see depends_on below) instead of just "started".
+    # "$${POSTGRES_USER}" escapes the $ so the container's shell expands it, not compose.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 5s
@@ -49,7 +63,7 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_NUM_PARTITIONS: 3
 
-  kafka-ui:
+  kafka-ui:                            # browse topics and messages -> http://localhost:8090
     image: kafbat/kafka-ui:latest
     ports: ["8090:8080"]
     environment:
@@ -74,10 +88,13 @@ services:
 
   # ------------------------------------------------------------------ platform services
   config-server:
+    # Only started with "--profile apps" (compose profiles are unrelated to Spring profiles).
     profiles: [apps]
+    # Build the image from the root Dockerfile, passing the Maven module to package as a build arg.
     build: { context: ., args: { MODULE: config-server } }
     ports: ["8888:8888"]
     healthcheck:
+      # "Is the port accepting connections?" using bash's /dev/tcp (the JRE image has no curl).
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8888"]
       interval: 5s
       retries: 30
@@ -95,7 +112,9 @@ services:
     profiles: [apps]
     build: { context: ., args: { MODULE: api-gateway } }
     ports: ["8080:8080"]
+    # Reuse the shared env block as-is.
     environment: *app-env
+    # Start order: wait until config-server and discovery-server report healthy.
     depends_on:
       config-server: { condition: service_healthy }
       discovery-server: { condition: service_healthy }
@@ -106,9 +125,11 @@ services:
     build: { context: ., args: { MODULE: auth-service } }
     ports: ["8081:8081"]
     environment:
+      # "<<:" merges the shared block, then adds service-specific variables.
       <<: *app-env
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@homefin.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin#12345}
+    # Anchor this dependency list too, so the other business services can reuse it with *svc-deps.
     depends_on: &svc-deps
       postgres: { condition: service_healthy }
       kafka: { condition: service_started }
@@ -133,5 +154,15 @@ services:
       VALUATION_API_KEY: ${VALUATION_API_KEY:-local-dev-key}
     depends_on: *svc-deps
 
+  # ------------------------------------------------------------------ web UI
+  # React + TypeScript app (frontend/). nginx serves the static build and proxies /api/* to the
+  # gateway, so the browser sees one origin (no CORS). Open http://localhost:3000
+  frontend:
+    profiles: [apps]
+    build: { context: ./frontend }
+    ports: ["3000:80"]
+    depends_on: [api-gateway]
+
+# Named volumes managed by Docker.
 volumes:
   pgdata:

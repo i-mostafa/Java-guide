@@ -1,37 +1,47 @@
 # Served to EVERY service (lowest precedence among config-server files; overrides the service's local application.yml).
 # Precedence (highest first): {app}-{profile}.yml > application-{profile}.yml > {app}.yml > application.yml
 # Never commit real secrets here - reference env vars / a secret manager instead.
+# How it arrives: each service sets spring.config.import=configserver:... and fetches this at startup.
 
 spring:
   threads:
     virtual:
       enabled: true          # Java 21 virtual threads for request handling
+      # (cheap threads managed by the JVM - blocking I/O no longer ties up an OS thread,
+      # giving Node-like concurrency while keeping simple blocking code)
   jpa:
     open-in-view: false      # avoid lazy-loading in the web layer (a classic anti-pattern)
 
 eureka:
   client:
     service-url:
+      # ${EUREKA_URL:...} = process.env.EUREKA_URL ?? 'http://localhost:8761/eureka'
       defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
   instance:
+    # Register with the container's IP instead of its hostname (hostnames often aren't resolvable).
     prefer-ip-address: true
 
+# Actuator (operational endpoints under /actuator/*).
 management:
   endpoints:
     web:
       exposure:
+        # prometheus = /actuator/prometheus metrics scrape endpoint (like prom-client's /metrics).
         include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:
         enabled: true        # /actuator/health/liveness and /readiness for Kubernetes
+      # Only show component details (DB, Kafka, disk...) to authenticated callers.
       show-details: when-authorized
   tracing:
     sampling:
       probability: 1.0       # sample everything locally; use ~0.1 in production
   otlp:
     tracing:
+      # OpenTelemetry collector endpoint; overridden to Jaeger in application-docker.yml.
       endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
 
+# Custom property - a simple way to check that config from the server actually reached a service.
 app:
   greeting: "Config delivered by config-server"

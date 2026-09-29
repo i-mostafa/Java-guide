@@ -1,26 +1,40 @@
+# Local configuration of the api-gateway (loaded by Spring Boot at startup). Values fetched from
+# config-server (see spring.config.import) are merged on top of these.
+
 server:
+  # The public port clients (browser, mobile app) talk to.
   port: 8080
 
 spring:
   application:
+    # Also the name used to register in Eureka and to look up config-server files (api-gateway-*.yml).
     name: api-gateway
   config:
+    # Load extra config from config-server. "optional:" = still start if it's unreachable.
+    # ${CONFIG_SERVER_URL:http://localhost:8888} reads the env var, falling back to the default,
+    # i.e. process.env.CONFIG_SERVER_URL ?? 'http://localhost:8888'.
     import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
   security:
     oauth2:
       resourceserver:
         jwt:
+          # Where to download auth-service's public keys (JWKS) to verify JWT signatures.
           jwk-set-uri: ${JWKS_URI:http://localhost:8081/.well-known/jwks.json}
+          # Tokens must have this "iss" claim...
           issuer-uri: ${JWT_ISSUER:http://localhost:8081}
+          # ...and this "aud" claim, otherwise they're rejected with 401.
           audiences: homefin-api
   cloud:
     gateway:
       server:
         webflux:
+          # Route table: the first route whose predicates match the request wins.
           routes:
             - id: auth-service
+              # lb:// = "look up instances of auth-service in Eureka and load-balance across them".
               uri: lb://auth-service
               predicates:
+                # Match on path (comma separated list; ** = any sub-path). The path is forwarded unchanged.
                 - Path=/api/auth/**,/.well-known/jwks.json
             - id: customer-service
               uri: lb://customer-service
@@ -30,6 +44,7 @@ spring:
               uri: lb://application-service
               predicates:
                 - Path=/api/applications/**
+          # Filters applied to every route (like a router-level middleware).
           default-filters:
             # Retry idempotent requests once on a 502/503 from a downstream instance
             - name: Retry

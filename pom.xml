@@ -4,27 +4,42 @@
   Think of it as a monorepo root package.json + a shared tsconfig:
   it pins versions (dependencyManagement) and build settings (pluginManagement)
   once, and every module inherits them.
+
+  Common commands (run from this folder; "mvn" is Maven, the npm/yarn of Java):
+    mvn test       compile everything and run unit tests
+    mvn verify     also run integration tests (*IT classes)
+    mvn package    build the JARs into each module's target/ folder (like dist/)
+  Maven downloads dependencies into ~/.m2/repository (a global cache, unlike per-project node_modules).
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <!-- Version of the POM file format (always 4.0.0), not of this project. -->
     <modelVersion>4.0.0</modelVersion>
 
     <!-- Inherit Spring Boot's curated dependency versions + plugin config -->
+    <!-- A parent is identified by its coordinates: groupId (organisation, reverse domain name),
+         artifactId (package name) and version. Like "extends" pointing at a published npm package. -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>3.5.6</version>
+        <!-- Empty relativePath = don't look for the parent on disk; fetch it from Maven Central. -->
         <relativePath/>
     </parent>
 
+    <!-- This project's own coordinates, inherited by every module (they only set their artifactId).
+         SNAPSHOT marks a development version that may change, unlike a fixed release. -->
     <groupId>com.homefin</groupId>
     <artifactId>homefin-platform</artifactId>
     <version>0.1.0-SNAPSHOT</version>
+    <!-- packaging=pom: this project produces no JAR itself; it only aggregates and configures modules. -->
     <packaging>pom</packaging>
     <name>HomeFin Platform</name>
     <description>Reference Spring Boot microservices platform (property finance domain)</description>
 
+    <!-- The sub-projects built together, like "workspaces" in a root package.json.
+         Maven works out the build order from their dependencies (common-lib first). -->
     <modules>
         <module>common-lib</module>
         <module>config-server</module>
@@ -35,6 +50,8 @@
         <module>application-service</module>
     </modules>
 
+    <!-- Named values usable anywhere as ${name} (like variables); some are read by plugins directly.
+         java.version is used by the Spring Boot parent to set the compiler's Java language level. -->
     <properties>
         <java.version>21</java.version>
         <!-- keep in sync with the parent version above (used for annotation processor paths) -->
@@ -49,6 +66,8 @@
         <resilience4j.version>2.3.0</resilience4j.version>
     </properties>
 
+    <!-- dependencyManagement pins versions WITHOUT adding dependencies: a module that declares e.g.
+         mapstruct gets this version automatically. Similar to pnpm "overrides" / a shared catalog. -->
     <dependencyManagement>
         <dependencies>
             <!-- Resilience4j BOM FIRST: Spring Cloud's BOM also manages resilience4j-* modules.
@@ -58,6 +77,8 @@
                 <groupId>io.github.resilience4j</groupId>
                 <artifactId>resilience4j-bom</artifactId>
                 <version>${resilience4j.version}</version>
+                <!-- type=pom + scope=import: copy the version list of this BOM ("bill of materials")
+                     into our dependencyManagement. For conflicting entries the first declaration wins. -->
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -75,6 +96,7 @@
             <dependency>
                 <groupId>com.homefin</groupId>
                 <artifactId>common-lib</artifactId>
+                <!-- ${project.version} = this pom's own version (0.1.0-SNAPSHOT). -->
                 <version>${project.version}</version>
             </dependency>
 
@@ -91,10 +113,15 @@
         </dependencies>
     </dependencyManagement>
 
+    <!-- Build settings. pluginManagement configures plugins for modules that USE them;
+         the plugins section further down actually activates a plugin for every module. -->
     <build>
         <pluginManagement>
             <plugins>
                 <!-- Annotation processors = compile-time code generation (like a TS transformer) -->
+                <!-- The compiler plugin runs javac. Each processor below runs inside javac:
+                     Lombok (getters/constructors/loggers), MapStruct (DTO mappers), the Lombok+MapStruct
+                     ordering binding, and Spring Boot's processor (IDE autocompletion for app.* YAML keys). -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
@@ -103,6 +130,7 @@
                             <path>
                                 <groupId>org.projectlombok</groupId>
                                 <artifactId>lombok</artifactId>
+                                <!-- lombok.version is defined by the Spring Boot parent. -->
                                 <version>${lombok.version}</version>
                             </path>
                             <path>
@@ -126,6 +154,7 @@
                 <plugin>
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
+                    <!-- Don't copy Lombok into the executable JAR: it's only needed at compile time. -->
                     <configuration>
                         <excludes>
                             <exclude>

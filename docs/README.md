@@ -6,6 +6,11 @@ so read a chapter, then open the referenced files.
 
 > **How to use it:** skim chapters 1–4 in order (they're the foundation), then jump to whatever your task needs.
 > Chapter 15 is a playbook for your first days on an existing project.
+>
+> **Read the code alongside the guide:** every Java, YAML and `pom.xml` file in this repo carries beginner-level
+> comments with TypeScript/Node analogies. A good reading order for one feature end to end:
+> `CustomerController` → `CustomerService` → `Customer` (entity) → `CustomerRepository` → `KycClient` →
+> `UserRegisteredListener`, then the matching tests. The React UI in `frontend/` shows how each screen calls these endpoints.
 
 | # | Chapter | You'll learn |
 |---|---|---|

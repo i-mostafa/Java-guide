@@ -79,6 +79,9 @@ public Customer updateProfile(UUID userId, UpdateProfileRequest r) {
 `src/main/resources/db/migration/V1__create_customers.sql`, `V2__...`: applied in order on startup, recorded in `flyway_schema_history`, checksummed.
 
 - **Never edit an applied migration** — add a new one (`V2__add_status_check.sql` in application-service).
+  Flyway stores a checksum of the *whole file*, so even adding a comment to an applied migration makes the app
+  refuse to start (`Validate failed: Migration checksum mismatch`). Locally you can recover with `flyway repair` or
+  by recreating the database (`docker compose down -v`); in shared environments, just don't.
 - `spring.jpa.hibernate.ddl-auto: validate` — Hibernate only checks the entities match the schema. Never use `update`/`create` beyond throwaway prototypes.
 - Zero-downtime changes are *expand → migrate → contract*: add the new nullable column, deploy code that writes both, backfill, switch reads, drop the old column later.
 - Liquibase is the common alternative (XML/YAML changelogs); the principles are identical.

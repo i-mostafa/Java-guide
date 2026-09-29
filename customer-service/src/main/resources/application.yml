@@ -1,86 +1,115 @@
+# Main configuration for customer-service. Spring Boot reads this file at startup (it's like a typed .env / config
+# module). Keys are nested; "spring.datasource.url" in Java code refers to spring -> datasource -> url below.
+# Placeholders: ${VAR:default} means "environment variable VAR if set, otherwise default",
+# i.e. process.env.VAR ?? 'default'. Env vars can also override ANY key directly using relaxed binding:
+# SPRING_DATASOURCE_URL overrides spring.datasource.url (upper-case, dots/dashes become underscores).
+# Values from the Config Server (see spring.config.import) and profile files (application-<profile>.yml)
+# are layered on top of this file.
+
+# Embedded web server (Tomcat) settings.
 server:
   port: 8082
-  shutdown: graceful
+  shutdown: graceful   # on SIGTERM, stop accepting new requests and let in-flight ones finish
   forward-headers-strategy: framework   # trust X-Forwarded-* from the gateway (correct Location/links)
 
 spring:
   application:
-    name: customer-service
+    name: customer-service   # service name used by Eureka discovery, Config Server lookup, and tracing
   config:
+    # Pull extra config from the central Spring Cloud Config Server. "optional:" = start anyway if it's down.
     import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  # JDBC connection to PostgreSQL (like a pg Pool connection string). Pooling is done by HikariCP by default.
   datasource:
     url: jdbc:postgresql://localhost:5432/customerdb
     username: ${DB_USERNAME:homefin}
     password: ${DB_PASSWORD:homefin}
   jpa:
+    # Don't keep the DB session open while the HTTP response is rendered (avoids hidden lazy-load queries
+    # in controllers). All DB work must happen inside the service layer's transactions.
     open-in-view: false
     hibernate:
+      # Hibernate never creates/alters tables; it only validates that entities match the schema at startup.
+      # Flyway (db/migration/*.sql) owns the schema.
       ddl-auto: validate
   data:
     web:
       pageable:
         max-page-size: 100      # protect the DB from ?size=1000000
+  # Spring Security as an OAuth2 "resource server": every request must carry a valid JWT bearer token.
   security:
     oauth2:
       resourceserver:
         jwt:
+          # Where to download the public keys (JWKS) used to verify token signatures, like jwks-rsa in Node.
           jwk-set-uri: ${JWKS_URI:http://localhost:8081/.well-known/jwks.json}
           issuer-uri: ${JWT_ISSUER:http://localhost:8081}   # with jwk-set-uri set, only used to validate "iss"
-          audiences: homefin-api
+          audiences: homefin-api   # the token's "aud" claim must contain this value
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: customer-service       # all instances share the group -> partitions are split between them
-      auto-offset-reset: earliest
+      auto-offset-reset: earliest      # a brand-new group starts from the oldest message, not only new ones
+      # ErrorHandlingDeserializer wraps the real deserializers below. If a message can't be parsed (poison pill),
+      # it doesn't crash the consumer loop; the failure is passed to the error handler (-> dead-letter topic).
       key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        # The "delegate" deserializers that do the actual work: key = plain string, value = JSON -> Java object.
         spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
         spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        # Security allow-list: only JSON whose type header points into this package may be turned into objects.
         spring.json.trusted.packages: com.homefin.common.events
     producer:   # used by the dead-letter publisher
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
+# Our own custom settings (not a Spring namespace). Bound to the KycProperties class via
+# @ConfigurationProperties("app.kyc"): kebab-case keys map to camelCase fields (base-url -> baseUrl).
 app:
   kyc:
     base-url: ${KYC_BASE_URL:http://localhost:9090}
     api-key: ${KYC_API_KEY:local-dev-key}
-    connect-timeout: 2s
+    connect-timeout: 2s   # "2s" is parsed into a java.time.Duration automatically
     read-timeout: 3s
 
+# Resilience4j: fault-tolerance policies for calls to the 3rd-party KYC provider.
+# "instances.kyc" is a named policy; code opts in with @Retry(name = "kyc") / @CircuitBreaker(name = "kyc").
 resilience4j:
   retry:
     instances:
       kyc:
-        max-attempts: 3
-        wait-duration: 500ms
+        max-attempts: 3                    # 1 original call + up to 2 retries
+        wait-duration: 500ms               # wait before the first retry...
         enable-exponential-backoff: true
-        exponential-backoff-multiplier: 2
+        exponential-backoff-multiplier: 2  # ...then double each time: 500ms, 1s
+        # Only retry these (transient) errors; anything else fails immediately.
         retry-exceptions:
           - com.homefin.customer.kyc.KycProviderException
           - org.springframework.web.client.ResourceAccessException   # timeouts / connection refused
   circuitbreaker:
     instances:
       kyc:
+        # Look at the outcome of the last 10 calls...
         sliding-window-type: COUNT_BASED
         sliding-window-size: 10
-        minimum-number-of-calls: 5
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 2
+        minimum-number-of-calls: 5         # ...but only judge once at least 5 calls were made
+        failure-rate-threshold: 50         # if >= 50% failed, OPEN the circuit: calls fail fast without hitting KYC
+        wait-duration-in-open-state: 30s   # after 30s go HALF_OPEN and let a few trial calls through
+        permitted-number-of-calls-in-half-open-state: 2   # 2 trial calls decide: success -> CLOSED, fail -> OPEN
+        # Business errors (e.g. "customer is a minor") are not provider outages, so they don't count as failures.
         ignore-exceptions:
           - com.homefin.common.error.BusinessRuleException
 
+# Spring Boot Actuator: operational HTTP endpoints under /actuator/*.
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,circuitbreakers
+        include: health,info,metrics,prometheus,circuitbreakers   # which endpoints are reachable over HTTP
   health:
     circuitbreakers:
-      enabled: true
+      enabled: true   # include circuit-breaker state in /actuator/health
 
 logging:
   level:
-    com.homefin: DEBUG
+    com.homefin: DEBUG   # log level per package prefix (our code); everything else stays at the INFO default

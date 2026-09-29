@@ -1,7 +1,10 @@
+# Served ONLY to auth-service when the "docker" profile is active ({app}-{profile}.yml).
 spring:
   datasource:
+    # JDBC connection string for auth-service's own database (database-per-service pattern).
     url: jdbc:postgresql://postgres:5432/authdb
 
 app:
   jwt:
+    # Value put in the "iss" claim of issued JWTs; resource servers must be configured to expect it.
     issuer: http://auth-service:8081

@@ -1,16 +1,22 @@
 # Overrides for every service when running inside docker compose (profile "docker").
+# File naming: "application" = applies to ALL services, "-docker" = only when the docker profile
+# is active (docker-compose.yml sets SPRING_PROFILES_ACTIVE=docker).
+# Inside the compose network, containers reach each other by service name (kafka, jaeger, ...).
 spring:
   kafka:
+    # Kafka broker address (the internal listener port used inside the docker network).
     bootstrap-servers: kafka:19092
 
 eureka:
   client:
     service-url:
+      # Where Eureka clients register and fetch the registry from.
       defaultZone: http://discovery-server:8761/eureka
 
 management:
   otlp:
     tracing:
+      # Send OpenTelemetry traces to Jaeger's OTLP HTTP endpoint.
       endpoint: http://jaeger:4318/v1/traces
 
 logging:

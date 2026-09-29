@@ -1,24 +1,52 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  pom.xml = the Maven "Project Object Model". Think of it as this module's package.json:
+  it declares the module's name/version, its dependencies, and build plugins (like npm scripts + tooling).
+  Maven downloads dependencies from Maven Central (like the npm registry) into ~/.m2 (like a global node_modules cache).
+  Common commands: "mvn test" (like npm test), "mvn package" (build a runnable jar),
+  "mvn spring-boot:run" (like npm start).
+-->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <!-- Version of the POM file format itself (always 4.0.0). Boilerplate. -->
     <modelVersion>4.0.0</modelVersion>
+    <!--
+      <parent> = inherit settings from the root pom.xml of this monorepo (homefin-platform).
+      The parent pins dependency versions centrally (a "BOM" / dependencyManagement), which is why most
+      <dependency> entries below have NO <version>: similar to npm workspaces + a shared lockfile/overrides.
+    -->
     <parent>
         <groupId>com.homefin</groupId>
         <artifactId>homefin-platform</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>
+    <!--
+      A Maven coordinate is groupId:artifactId:version (like "@scope/name@version" in npm).
+      groupId is inherited from the parent; artifactId is this module's package name.
+      SNAPSHOT means "work in progress, not a released version" (like a 0.x prerelease).
+    -->
     <artifactId>customer-service</artifactId>
     <name>customer-service</name>
     <description>Customer profiles and KYC (3rd-party) verification</description>
 
+    <!-- <dependencies> = the "dependencies" + "devDependencies" of package.json, distinguished by <scope>. -->
     <dependencies>
+        <!-- Shared code from a sibling module in this monorepo (events, error types...), like a workspace package. -->
         <dependency>
             <groupId>com.homefin</groupId>
             <artifactId>common-lib</artifactId>
         </dependency>
 
-        <!-- Web + validation + security -->
+        <!--
+          Web + validation + security.
+          "Starters" are curated bundles: one dependency pulls in a whole stack plus auto-configuration.
+          starter-web = embedded Tomcat HTTP server + Spring MVC (the Express/NestJS equivalent) + Jackson (JSON).
+          starter-validation = Bean Validation (Hibernate Validator): annotations like NotBlank,
+          similar to zod/class-validator.
+          starter-security = Spring Security (auth filter chain, like passport middleware).
+          oauth2-resource-server = validates incoming JWT bearer tokens (like express-jwt / passport-jwt).
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -36,11 +64,19 @@
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
 
-        <!-- Persistence: JPA/Hibernate + PostgreSQL + Flyway migrations -->
+        <!--
+          Persistence: JPA/Hibernate + PostgreSQL + Flyway migrations.
+          data-jpa = JPA (the ORM standard) implemented by Hibernate, plus Spring Data repositories
+          (roughly TypeORM/Prisma). flyway = SQL migration runner (like knex/prisma migrate), runs at startup.
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
+        <!--
+          The JDBC driver (like the "pg" npm package).
+          scope=runtime: not needed to compile our code (we never import it directly), only when the app runs.
+        -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -55,13 +91,17 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <!-- Messaging -->
+        <!-- Messaging: Spring for Apache Kafka (KafkaListener annotations, KafkaTemplate), like kafkajs + glue. -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
         </dependency>
 
-        <!-- Spring Cloud: discovery + central config -->
+        <!--
+          Spring Cloud: discovery + central config.
+          eureka-client = registers this service in the Eureka service registry so others find it by name.
+          starter-config = fetches configuration from the central Config Server at startup.
+        -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
@@ -70,11 +110,19 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-config</artifactId>
         </dependency>
+        <!--
+          MapStruct: generates entity-to-DTO mapper classes at COMPILE time from an interface.
+          The code generator itself (annotation processor) is configured in the parent pom.
+        -->
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
         </dependency>
-        <!-- Resilience4j: circuit breaker / retry around 3rd-party calls -->
+        <!--
+          Resilience4j: circuit breaker / retry around 3rd-party calls (like opossum / p-retry in Node).
+          starter-aop is required because Retry/CircuitBreaker annotations work via AOP proxies
+          (Spring wraps the bean in a generated wrapper object that intercepts method calls).
+        -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-spring-boot3</artifactId>
@@ -84,7 +132,11 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
-        <!-- Observability: health/metrics, tracing (traceId in every log line), Prometheus -->
+        <!--
+          Observability: health/metrics, tracing (traceId in every log line), Prometheus.
+          actuator = built-in ops endpoints under /actuator (health, metrics...), like express-status-monitor.
+          micrometer = metrics/tracing facade (like OpenTelemetry API); otel exporter ships traces via OTLP.
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -103,19 +155,24 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- API docs: Swagger UI at /swagger-ui.html -->
+        <!-- API docs: Swagger UI at /swagger-ui.html, generated from the controllers (like nestjs/swagger). -->
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
 
+        <!--
+          Lombok: a compile-time code generator. Annotations like Getter / RequiredArgsConstructor / Slf4j
+          make the compiler emit getters, constructors and loggers so we don't hand-write boilerplate.
+          optional=true: consumers of this module don't inherit it (it is only needed while compiling).
+        -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
 
-        <!-- Dev convenience: auto-restart on recompile (never packaged into the jar) -->
+        <!-- Dev convenience: auto-restart on recompile, like nodemon (never packaged into the jar) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
@@ -123,12 +180,19 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- ===== Tests ===== -->
+        <!--
+          ===== Tests =====
+          scope=test = devDependencies used only by "mvn test"; never shipped in the jar.
+          starter-test bundles JUnit 5 (test runner, like jest), AssertJ (fluent expect()), Mockito (jest.fn/jest.mock)
+          and MockMvc (in-process HTTP testing, like supertest).
+          Testcontainers starts real Postgres/Kafka in Docker for integration tests.
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Helpers to fake an authenticated user / JWT in MockMvc tests. -->
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
@@ -139,6 +203,7 @@
             <artifactId>spring-kafka-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Lets Spring Boot auto-wire container URLs into config (ServiceConnection annotation). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-testcontainers</artifactId>
@@ -161,8 +226,13 @@
         </dependency>
     </dependencies>
 
+    <!-- <build> = build tooling configuration (roughly the "scripts" + bundler config of package.json). -->
     <build>
         <plugins>
+            <!--
+              Packages the app as a single executable "fat jar" (all dependencies inside), runnable with
+              "java -jar customer-service.jar", and adds the spring-boot:run goal. Version comes from the parent.
+            -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

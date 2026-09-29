@@ -7,14 +7,22 @@ central config, an API gateway, 3rd-party HTTP calls with resilience, structured
 Docker, and a full test pyramid.
 
 > 📘 **The learning guide lives in [`docs/`](docs/README.md).** Every chapter points back to the code in this repo.
+>
+> 💬 **Every source file is commented for TypeScript developers who are new to Java.** Each class opens with a
+> "what is this / what's the TS equivalent" block, and each Java or Spring concept (annotations, generics, records,
+> lambdas, dependency injection, proxies...) is explained where it first appears in a file. The YAML and `pom.xml` files are
+> annotated the same way.
+>
+> 🖥️ **A React + TypeScript web UI lives in [`frontend/`](frontend/README.md)** so you can click through the whole flow.
 
 ---
 
 ## 1. Architecture
 
 ```
-                         ┌──────────────────────┐
-  client ──HTTP──▶       │  api-gateway :8080   │  JWT check, routing (lb://), request logging
+  browser ─▶ frontend :3000 (React, nginx or Vite dev server :5173) ─┐  proxies /api/*
+                         ┌──────────────────────┐                    │
+  client ──HTTP──▶       │  api-gateway :8080   │◀───────────────────┘  JWT check, routing (lb://), request logging
                          └─────────┬────────────┘
                  ┌─────────────────┼──────────────────────┐
                  ▼                 ▼                      ▼
@@ -36,6 +44,7 @@ Docker, and a full test pyramid.
 
 | Module | What it demonstrates |
 |---|---|
+| `frontend` | React 19 + TypeScript + Vite web UI: auth, profile & KYC, finance applications, admin review; renders ProblemDetail errors |
 | `common-lib` | Shared library: RFC 9457 error handling, JWT role mapping, event contracts, `BaseEntity`, a **custom auto-configuration** |
 | `config-server` | Spring Cloud Config (native backend) serving shared + per-profile config |
 | `discovery-server` | Eureka service registry |
@@ -60,6 +69,7 @@ Resilience4j · MapStruct · Lombok · springdoc-openapi · Micrometer + OpenTel
 |---|---|---|
 | **JDK 21** (Temurin) | compile & run Java | `curl -s "https://get.sdkman.io" \| bash` then `sdk env install` (reads `.sdkmanrc`) — or `brew install --cask temurin@21` |
 | **Maven 3.9+** | build tool (the "npm" of Java) | `sdk install maven` or `brew install maven` |
+| **Node.js 22 LTS** (+ npm) | the web UI in `frontend/` (only needed to run it outside Docker) | `brew install node@22` or `nvm install 22` |
 | **Docker Desktop** (or OrbStack / Colima) | Postgres, Kafka, WireMock, Jaeger, Testcontainers | <https://www.docker.com/products/docker-desktop/> |
 | **IntelliJ IDEA** (Community is enough; Ultimate has Spring tooling) | IDE | `brew install --cask intellij-idea-ce` |
 | *Optional:* `jq`, `httpie`, DBeaver, `kcat` | poke APIs / DB / Kafka | `brew install jq httpie kcat` · `brew install --cask dbeaver-community` |
@@ -86,6 +96,8 @@ docker compose --profile apps up -d --build       # first build takes a few minu
 docker compose ps
 ```
 
+Then open the UI at **<http://localhost:3000>**.
+
 ### Option B — infrastructure in Docker, services from your IDE (best for development/debugging)
 
 ```bash
@@ -104,9 +116,16 @@ mvn -pl application-service spring-boot:run
 mvn -pl api-gateway         spring-boot:run
 ```
 
+And the UI (hot reload, proxies `/api` to the gateway on :8080):
+
+```bash
+cd frontend && npm install && npm run dev      # http://localhost:5173
+```
+
 ### Try it
 
-Open [`http/homefin.http`](http/homefin.http) in IntelliJ (or VS Code + *REST Client*) and run the requests top to bottom:
+The easiest way is the UI: register, complete your profile, run KYC, submit an application, then log in as the
+admin (below) and review it. To drive the API directly, open [`http/homefin.http`](http/homefin.http) in IntelliJ (or VS Code + *REST Client*) and run the requests top to bottom:
 register → login → profile → KYC → submit application → admin review. Or with curl:
 
 ```bash
@@ -128,6 +147,7 @@ Default admin (dev only): `admin@homefin.local` / `Admin#12345`.
 
 | URL | What |
 |---|---|
+| <http://localhost:3000> | Web UI (Docker) — or <http://localhost:5173> with `npm run dev` |
 | <http://localhost:8080> | API gateway (use this for all API calls) |
 | <http://localhost:8081/swagger-ui.html> · `:8082` · `:8083` | Swagger UI per service |
 | <http://localhost:8761> | Eureka dashboard (registered instances) |
@@ -166,6 +186,7 @@ homefin-platform/
 │       └── events/              # domain events -> Kafka
 ├── customer-service/
 ├── application-service/
+├── frontend/                    # React + TypeScript UI (Vite, nginx for Docker)
 ├── infra/                       # postgres init, wiremock stubs
 ├── http/homefin.http            # runnable API walkthrough
 ├── docs/                        # THE GUIDE
@@ -183,6 +204,7 @@ homefin-platform/
 | `/api/customers/me` → 404 right after registering | Profile is created asynchronously from Kafka; retry after a second (eventual consistency) |
 | `Could not resolve dependencies ... common-lib` | Run `mvn install -DskipTests` from the root once (or use `-am`) |
 | Lombok/MapStruct symbols "cannot be found" in IntelliJ | Enable *Settings → Build → Compiler → Annotation Processors → Enable annotation processing* |
+| UI sends you back to the login page after a backend restart | Expected in dev: auth-service regenerates its signing key on start, so log in again |
 | Port already in use | `lsof -i :8081` and kill the process, or change `server.port` |
 | `Error processing condition on ...resilience4j...FallbackConfigurationOnMissingBean` | Mixed Resilience4j versions on the classpath — check `mvn -pl customer-service dependency:tree -Dincludes=io.github.resilience4j`; all must share one version (the root pom imports `resilience4j-bom` for this) |
 | Testcontainers can't find Docker (Colima/OrbStack) | see <https://java.testcontainers.org/supported_docker_environment/> |

@@ -1,7 +1,13 @@
+# Local configuration of auth-service, read by Spring Boot at startup. Precedence (highest wins):
+# env vars / CLI args > config-server files > this file. Placeholders like ${DB_USERNAME:homefin}
+# read the environment variable, falling back to the value after the colon, i.e.
+# process.env.DB_USERNAME ?? 'homefin'. (Spring also maps env var SPRING_DATASOURCE_URL onto
+# spring.datasource.url automatically - "relaxed binding".)
+
 server:
   port: 8081
-  shutdown: graceful
-  forward-headers-strategy: framework   # trust X-Forwarded-* from the gateway (correct Location/links)          # finish in-flight requests on SIGTERM
+  shutdown: graceful          # finish in-flight requests on SIGTERM
+  forward-headers-strategy: framework   # trust X-Forwarded-* from the gateway (correct Location/links)
 
 spring:
   application:
@@ -9,46 +15,60 @@ spring:
   config:
     # Pull shared config from config-server; "optional:" = still start if it's down (local dev).
     import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  # JDBC connection to PostgreSQL (overridden to the "postgres" host by config-server in docker).
   datasource:
     url: jdbc:postgresql://localhost:5432/authdb
     username: ${DB_USERNAME:homefin}
     password: ${DB_PASSWORD:homefin}
+    # HikariCP = the connection pool Spring Boot uses (like pg.Pool({ max: 10 })).
     hikari:
       maximum-pool-size: 10
   jpa:
+    # Don't keep the DB session open during view rendering / JSON serialization.
     open-in-view: false
     hibernate:
       ddl-auto: validate      # Flyway owns the schema; Hibernate only checks it matches
+    # Raw Hibernate settings passed through as-is.
     properties:
       hibernate:
         jdbc:
+          # Store and read timestamps in UTC regardless of the server's time zone.
           time_zone: UTC
+  # Flyway runs the SQL migrations in src/main/resources/db/migration at startup
+  # (like running "knex migrate:latest" / "prisma migrate deploy" before the app starts).
   flyway:
     enabled: true
     locations: classpath:db/migration
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
+      # Message key sent as plain string, value as JSON (Jackson).
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      # Wait for all in-sync replicas to acknowledge each write (safest durability setting).
       acks: all
 
+# Our own settings, bound to JwtProperties (app.jwt) and BootstrapAdminProperties (app.bootstrap-admin).
 app:
   jwt:
     issuer: ${JWT_ISSUER:http://localhost:8081}
     audience: homefin-api
+    # Converted to java.time.Duration: 15m = 15 minutes.
     access-token-ttl: 15m
   bootstrap-admin:
     enabled: true
+    # Dev-only defaults; never rely on these outside local development.
     email: ${ADMIN_EMAIL:admin@homefin.local}
     password: ${ADMIN_PASSWORD:Admin#12345}
 
+# Actuator endpoints exposed over HTTP (under /actuator).
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus
 
+# Log levels per package (logger name prefix), like setting a namespace level in the "debug"/pino modules.
 logging:
   level:
     com.homefin: DEBUG

@@ -1,7 +1,14 @@
+# Served ONLY to the service named "application-service" when the "docker" profile is active
+# (file name pattern: {spring.application.name}-{profile}.yml). Highest precedence of the
+# config-server files. Note: "application-service" here is a service name, not the special
+# "application" prefix that applies to all services.
 spring:
   datasource:
+    # JDBC URL = the database connection string (like postgres://postgres:5432/applicationdb).
     url: jdbc:postgresql://postgres:5432/applicationdb
 
+# "app.*" is our own custom namespace; the service binds it to a @ConfigurationProperties class.
 app:
   valuation:
+    # The property valuation API is faked by WireMock in docker compose.
     base-url: http://wiremock:8080
