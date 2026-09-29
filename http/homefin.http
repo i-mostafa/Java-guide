@@ -1,0 +1,82 @@
+### HomeFin API walkthrough - run top to bottom.
+### IntelliJ HTTP Client (built-in) or VS Code "REST Client" extension. All calls go through the gateway.
+@gateway = http://localhost:8080
+
+### 1) Register a customer
+POST {{gateway}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "jane.doe@example.com",
+  "password": "S3cure#Passw0rd",
+  "firstName": "Jane",
+  "lastName": "Doe"
+}
+
+### 2) Login (IntelliJ stores the token for the next requests)
+POST {{gateway}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "jane.doe@example.com", "password": "S3cure#Passw0rd" }
+
+> {% client.global.set("token", response.body.accessToken); %}
+
+### 3) My profile (created asynchronously from the Kafka UserRegistered event)
+GET {{gateway}}/api/customers/me
+Authorization: Bearer {{token}}
+
+### 4) Complete profile (try invalid values to see validation errors)
+PUT {{gateway}}/api/customers/me
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Jane",
+  "lastName": "Doe",
+  "phoneNumber": "+971501234567",
+  "dateOfBirth": "1990-05-17",
+  "nationalId": "784-1990-1234567-1"
+}
+
+### 5) KYC via 3rd-party provider (WireMock). nationalId starting 000 -> REJECTED, 999 -> provider outage
+POST {{gateway}}/api/customers/me/kyc
+Authorization: Bearer {{token}}
+
+### 6) Submit a finance application (calls customer-service + valuation provider, publishes Kafka event)
+POST {{gateway}}/api/applications
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "propertyReference": "DXB-MARINA-1204",
+  "city": "Dubai",
+  "propertyType": "APARTMENT",
+  "propertyValue": 1500000.00,
+  "financeAmount": 1000000.00,
+  "tenureMonths": 300
+}
+
+> {% client.global.set("appId", response.body.id); %}
+
+### 7) My applications (paginated)
+GET {{gateway}}/api/applications?page=0&size=10&sort=createdAt,desc
+Authorization: Bearer {{token}}
+
+### 8) Login as admin
+POST {{gateway}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "admin@homefin.local", "password": "Admin#12345" }
+
+> {% client.global.set("adminToken", response.body.accessToken); %}
+
+### 9) Admin moves the application -> customer-service logs a "notification" (Kafka)
+PATCH {{gateway}}/api/applications/{{appId}}/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "status": "UNDER_REVIEW" }
+
+### 10) Admin: search customers
+GET {{gateway}}/api/customers?kycStatus=VERIFIED
+Authorization: Bearer {{adminToken}}

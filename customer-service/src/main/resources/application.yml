@@ -1,0 +1,86 @@
+server:
+  port: 8082
+  shutdown: graceful
+  forward-headers-strategy: framework   # trust X-Forwarded-* from the gateway (correct Location/links)
+
+spring:
+  application:
+    name: customer-service
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  datasource:
+    url: jdbc:postgresql://localhost:5432/customerdb
+    username: ${DB_USERNAME:homefin}
+    password: ${DB_PASSWORD:homefin}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  data:
+    web:
+      pageable:
+        max-page-size: 100      # protect the DB from ?size=1000000
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWKS_URI:http://localhost:8081/.well-known/jwks.json}
+          issuer-uri: ${JWT_ISSUER:http://localhost:8081}   # with jwk-set-uri set, only used to validate "iss"
+          audiences: homefin-api
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: customer-service       # all instances share the group -> partitions are split between them
+      auto-offset-reset: earliest
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.homefin.common.events
+    producer:   # used by the dead-letter publisher
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+app:
+  kyc:
+    base-url: ${KYC_BASE_URL:http://localhost:9090}
+    api-key: ${KYC_API_KEY:local-dev-key}
+    connect-timeout: 2s
+    read-timeout: 3s
+
+resilience4j:
+  retry:
+    instances:
+      kyc:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - com.homefin.customer.kyc.KycProviderException
+          - org.springframework.web.client.ResourceAccessException   # timeouts / connection refused
+  circuitbreaker:
+    instances:
+      kyc:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        ignore-exceptions:
+          - com.homefin.common.error.BusinessRuleException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers
+  health:
+    circuitbreakers:
+      enabled: true
+
+logging:
+  level:
+    com.homefin: DEBUG

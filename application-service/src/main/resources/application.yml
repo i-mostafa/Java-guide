@@ -1,0 +1,91 @@
+server:
+  port: 8083
+  shutdown: graceful
+  forward-headers-strategy: framework   # trust X-Forwarded-* from the gateway (correct Location/links)
+
+spring:
+  application:
+    name: application-service
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  datasource:
+    url: jdbc:postgresql://localhost:5432/applicationdb
+    username: ${DB_USERNAME:homefin}
+    password: ${DB_PASSWORD:homefin}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWKS_URI:http://localhost:8081/.well-known/jwks.json}
+          issuer-uri: ${JWT_ISSUER:http://localhost:8081}
+          audiences: homefin-api
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 3000
+            logger-level: basic
+
+app:
+  finance:
+    annual-profit-rate: 0.0499
+    max-finance-to-value: 0.80
+  valuation:
+    base-url: ${VALUATION_BASE_URL:http://localhost:9090}
+    api-key: ${VALUATION_API_KEY:local-dev-key}
+    connect-timeout: 2s
+    read-timeout: 3s
+
+resilience4j:
+  retry:
+    instances:
+      valuation:
+        max-attempts: 3
+        wait-duration: 300ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - com.homefin.application.valuation.ValuationProviderException
+          - org.springframework.web.client.ResourceAccessException
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        ignore-exceptions:
+          - com.homefin.common.error.BusinessRuleException
+    instances:
+      valuation:
+        base-config: default
+      customer-service:
+        base-config: default
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers
+
+logging:
+  level:
+    com.homefin: DEBUG
+    com.homefin.application.customer.CustomerClient: DEBUG   # Feign logs at DEBUG level

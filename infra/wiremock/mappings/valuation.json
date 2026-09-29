@@ -1,0 +1,46 @@
+{
+  "mappings": [
+    {
+      "name": "Valuation - default estimate",
+      "priority": 10,
+      "request": { "method": "POST", "urlPath": "/valuation/v1/estimates" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": {
+          "valuationId": "VAL-{{randomValue length=8 type='NUMERIC'}}",
+          "propertyReference": "{{jsonPath request.body '$.propertyReference'}}",
+          "estimatedValue": 1450000.00,
+          "currency": "AED",
+          "confidence": "HIGH"
+        },
+        "transformers": ["response-template"]
+      }
+    },
+    {
+      "name": "Valuation - unknown property (404)",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/valuation/v1/estimates",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.propertyReference =~ /^UNKNOWN.*/)]" }]
+      },
+      "response": { "status": 404 }
+    },
+    {
+      "name": "Valuation - slow provider (tests read timeout)",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/valuation/v1/estimates",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.propertyReference =~ /^SLOW.*/)]" }]
+      },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 5000,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "valuationId": "VAL-SLOW", "estimatedValue": 1000000.00, "currency": "AED" }
+      }
+    }
+  ]
+}

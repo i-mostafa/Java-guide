@@ -1,0 +1,39 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWKS_URI:http://localhost:8081/.well-known/jwks.json}
+          issuer-uri: ${JWT_ISSUER:http://localhost:8081}
+          audiences: homefin-api
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: auth-service
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/auth/**,/.well-known/jwks.json
+            - id: customer-service
+              uri: lb://customer-service
+              predicates:
+                - Path=/api/customers/**
+            - id: application-service
+              uri: lb://application-service
+              predicates:
+                - Path=/api/applications/**
+          default-filters:
+            # Retry idempotent requests once on a 502/503 from a downstream instance
+            - name: Retry
+              args:
+                retries: 1
+                methods: GET
+                statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE

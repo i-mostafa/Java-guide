@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/customerdb
+
+app:
+  kyc:
+    base-url: http://wiremock:8080

@@ -1,0 +1,11 @@
+# Activated with @ActiveProfiles("test"). Turns off infrastructure not needed in tests.
+spring:
+  cloud:
+    config:
+      enabled: false
+eureka:
+  client:
+    enabled: false
+management:
+  tracing:
+    enabled: false

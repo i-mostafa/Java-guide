@@ -1,0 +1,53 @@
+{
+  "mappings": [
+    {
+      "name": "KYC - approved (default)",
+      "priority": 10,
+      "request": {
+        "method": "POST",
+        "urlPath": "/kyc/v1/verifications",
+        "headers": { "X-Api-Key": { "matches": ".+" } }
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "referenceId": "KYC-{{randomValue length=10 type='ALPHANUMERIC'}}", "status": "APPROVED", "score": 92 },
+        "transformers": ["response-template"]
+      }
+    },
+    {
+      "name": "KYC - rejected when nationalId starts with 000",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/kyc/v1/verifications",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.nationalId =~ /^000.*/)]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "referenceId": "KYC-REJECTED-1", "status": "REJECTED", "score": 12 }
+      }
+    },
+    {
+      "name": "KYC - provider outage when nationalId starts with 999 (tests retry + circuit breaker)",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/kyc/v1/verifications",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.nationalId =~ /^999.*/)]" }]
+      },
+      "response": { "status": 503, "body": "Service Unavailable" }
+    },
+    {
+      "name": "KYC - missing API key",
+      "priority": 5,
+      "request": {
+        "method": "POST",
+        "urlPath": "/kyc/v1/verifications",
+        "headers": { "X-Api-Key": { "absent": true } }
+      },
+      "response": { "status": 401 }
+    }
+  ]
+}

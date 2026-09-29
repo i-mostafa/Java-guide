@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/applicationdb
+
+app:
+  valuation:
+    base-url: http://wiremock:8080

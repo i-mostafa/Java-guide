@@ -1,0 +1,21 @@
+server:
+  port: 8888
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    # "native" = read config files from the filesystem/classpath.
+    # In production use the default "git" backend (spring.cloud.config.server.git.uri) or Vault.
+    active: native
+  cloud:
+    config:
+      server:
+        native:
+          search-locations: ${CONFIG_SEARCH_LOCATIONS:classpath:/config-repo}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

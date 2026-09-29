@@ -1,0 +1,37 @@
+# Served to EVERY service (lowest precedence among config-server files; overrides the service's local application.yml).
+# Precedence (highest first): {app}-{profile}.yml > application-{profile}.yml > {app}.yml > application.yml
+# Never commit real secrets here - reference env vars / a secret manager instead.
+
+spring:
+  threads:
+    virtual:
+      enabled: true          # Java 21 virtual threads for request handling
+  jpa:
+    open-in-view: false      # avoid lazy-loading in the web layer (a classic anti-pattern)
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true        # /actuator/health/liveness and /readiness for Kubernetes
+      show-details: when-authorized
+  tracing:
+    sampling:
+      probability: 1.0       # sample everything locally; use ~0.1 in production
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+
+app:
+  greeting: "Config delivered by config-server"

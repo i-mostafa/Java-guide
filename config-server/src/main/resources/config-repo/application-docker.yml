@@ -1,0 +1,19 @@
+# Overrides for every service when running inside docker compose (profile "docker").
+spring:
+  kafka:
+    bootstrap-servers: kafka:19092
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://discovery-server:8761/eureka
+
+management:
+  otlp:
+    tracing:
+      endpoint: http://jaeger:4318/v1/traces
+
+logging:
+  structured:
+    format:
+      console: ecs     # JSON logs (Elastic Common Schema) for log shippers
